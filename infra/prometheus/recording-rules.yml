@@ -1,0 +1,15 @@
+groups:
+  - name: deployment_sli_rules
+    interval: 30s
+    rules:
+      - record: sli:deployment_success_rate:current
+        expr: deployment_success_rate_percent
+
+      - record: slo:deployment_success_rate:target
+        expr: vector(95)
+
+      - record: slo:error_budget:remaining_percent
+        expr: sli:deployment_success_rate:current - on() group_left slo:deployment_success_rate:target
+
+      - record: slo:error_budget_burn_rate:1h
+        expr: (1 - (sli:deployment_success_rate:current / 100)) / (1 - 0.95)

@@ -1,0 +1,20 @@
+groups:
+  - name: slo_alerts
+    rules:
+      - alert: ErrorBudgetBreached
+        expr: slo:error_budget:remaining_percent < 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO error budget has been breached"
+          description: "Error budget remaining is {{ $value }}%, meaning the deployment success rate has fallen below the 95% SLO target."
+
+      - alert: HighErrorBudgetBurnRate
+        expr: slo:error_budget_burn_rate:1h > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Error budget is burning faster than sustainable"
+          description: "Current burn rate is {{ $value }}x — at this rate, the error budget will be exhausted well before the SLO period ends."

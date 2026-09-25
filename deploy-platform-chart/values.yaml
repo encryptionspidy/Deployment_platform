@@ -1,0 +1,19 @@
+appName: helm-test-portfolio
+namespace: deploy-platform
+replicaCount: 1
+image: jayasuryas2004-my_portfolio:af19032
+containerPort: 3000
+nodePort: 30100
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUPercent: 50

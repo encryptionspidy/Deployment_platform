@@ -1,0 +1,163 @@
+from fastapi import APIRouter, Request, HTTPException
+import httpx
+from app.core.deps import get_current_user_with_token
+from app.db.models import SessionLocal, Project
+
+router = APIRouter()
+
+GITHUB_API_BASE = "https://api.github.com"
+
+import os
+
+# Read from env or fallback to active ngrok/domain endpoint
+WEBHOOK_TARGET_URL = os.getenv("WEBHOOK_TARGET_URL", "https://sly-hardship-friday.ngrok-free.dev/webhook/github")
+WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "my-permanent-secret-123")
+
+
+@router.get("/projects")
+def list_connected_projects(request: Request):
+    """
+    Returns the logged-in user's connected projects.
+    """
+    auth_data = get_current_user_with_token(request)
+    user = auth_data["user"]
+
+    db = SessionLocal()
+    try:
+        projects = db.query(Project).filter(Project.user_id == user.id).all()
+        return [
+            {
+                "id": p.id,
+                "repo_full_name": p.repo_full_name,
+                "github_webhook_id": p.github_webhook_id,
+                "connected_at": p.created_at,
+            }
+            for p in projects
+        ]
+    finally:
+        db.close()
+
+
+@router.get("/projects/repos")
+async def list_repos(request: Request):
+    """
+    Lists the logged-in user's GitHub repositories.
+    """
+    auth_data = get_current_user_with_token(request)
+    access_token = auth_data["access_token"]
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{GITHUB_API_BASE}/user/repos",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"per_page": 50, "sort": "updated"},
+        )
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"GitHub API error: {response.text}",
+            )
+        repos = response.json()
+
+    return [
+        {"full_name": repo["full_name"], "private": repo["private"]}
+        for repo in repos
+        if isinstance(repo, dict) and "full_name" in repo
+    ]
+
+
+@router.post("/projects/connect")
+async def connect_repo(repo_full_name: str, request: Request):
+    """
+    Registers a webhook on the user's repo via GitHub API.
+    Handles 'Hook already exists' (HTTP 422) gracefully without throwing an error.
+    """
+    auth_data = get_current_user_with_token(request)
+    user = auth_data["user"]
+    access_token = auth_data["access_token"]
+
+    webhook_id = None
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{GITHUB_API_BASE}/repos/{repo_full_name}/hooks",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/vnd.github+json",
+            },
+            json={
+                "name": "web",
+                "active": True,
+                "events": ["push"],
+                "config": {
+                    "url": WEBHOOK_TARGET_URL,
+                    "content_type": "json",
+                    "secret": WEBHOOK_SECRET,
+                },
+            },
+        )
+
+        if response.status_code in (200, 201):
+            webhook_data = response.json()
+            webhook_id = webhook_data.get("id")
+        elif response.status_code == 422 and "Hook already exists" in response.text:
+            # Webhook is already registered on GitHub for this repo
+            pass
+        else:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"GitHub API error: {response.text}",
+            )
+
+    # Save project to Postgres DB for the logged-in user if not already added
+    db = SessionLocal()
+    try:
+        existing = (
+            db.query(Project)
+            .filter(Project.user_id == user.id, Project.repo_full_name == repo_full_name)
+            .first()
+        )
+
+        if not existing:
+            project = Project(
+                user_id=user.id,
+                repo_full_name=repo_full_name,
+                github_webhook_id=webhook_id,
+            )
+            db.add(project)
+            db.commit()
+            db.refresh(project)
+            webhook_id = project.github_webhook_id
+    finally:
+        db.close()
+
+    return {
+        "status": "connected",
+        "repo": repo_full_name,
+        "webhook_id": webhook_id,
+    }
+
+
+@router.delete("/projects/{project_id}")
+def disconnect_project(project_id: int, request: Request):
+    """
+    Disconnects a project and removes its record from PostgreSQL database.
+    """
+    auth_data = get_current_user_with_token(request)
+    user = auth_data["user"]
+
+    db = SessionLocal()
+    try:
+        project = (
+            db.query(Project)
+            .filter(Project.id == project_id, Project.user_id == user.id)
+            .first()
+        )
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        db.delete(project)
+        db.commit()
+        return {"status": "disconnected", "project_id": project_id}
+    finally:
+        db.close()
