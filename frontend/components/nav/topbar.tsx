@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, ShieldCheck, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,38 @@ interface TopbarProps {
   user?: AuthUser | null;
 }
 
+type ClusterStatus = "checking" | "operational" | "degraded";
+
+function useClusterStatus(): ClusterStatus {
+  const [status, setStatus] = useState<ClusterStatus>("checking");
+
+  useEffect(() => {
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
+
+    const check = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/readyz`, {
+          method: "GET",
+          signal: AbortSignal.timeout(3000),
+        });
+        setStatus(res.ok ? "operational" : "degraded");
+      } catch {
+        setStatus("degraded");
+      }
+    };
+
+    check();
+    const interval = setInterval(check, 20_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return status;
+}
+
 export function Topbar({ user }: TopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const clusterStatus = useClusterStatus();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
   const getBreadcrumbs = () => {
@@ -26,8 +55,7 @@ export function Topbar({ user }: TopbarProps) {
     let currentPath = "/dashboard";
     segments.forEach((seg) => {
       currentPath += `/${seg}`;
-      const name =
-        seg.charAt(0).toUpperCase() + seg.slice(1).replace("-", " ");
+      const name = seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " ");
       crumbs.push({ name, href: currentPath });
     });
 
@@ -51,9 +79,15 @@ export function Topbar({ user }: TopbarProps) {
   const username = user?.github_username || "Developer";
   const avatarLetter = username.charAt(0).toUpperCase();
 
+  const clusterBadge = {
+    checking:    { label: "Checking…",   dotCls: "bg-zinc-400 animate-pulse" },
+    operational: { label: "K8s Operational", dotCls: "bg-emerald-500" },
+    degraded:    { label: "API Degraded",    dotCls: "bg-red-400 animate-pulse" },
+  }[clusterStatus];
+
   return (
     <header className="h-13 bg-dark-900 border-b border-dark-700/80 px-6 flex items-center justify-between sticky top-0 z-20 select-none">
-      {/* Left: Vercel-style Breadcrumb Navigation */}
+      {/* Breadcrumbs */}
       <nav className="flex items-center gap-1.5 text-xs">
         <span className="font-semibold text-zinc-300">Deploy Platform</span>
         {breadcrumbs.map((crumb, idx) => (
@@ -72,11 +106,11 @@ export function Topbar({ user }: TopbarProps) {
         ))}
       </nav>
 
-      {/* Right: Status Pill & Solid User Badge */}
+      {/* Right — live status pill + user */}
       <div className="flex items-center gap-4">
         <div className="hidden sm:flex items-center gap-2 px-2 py-0.5 rounded bg-dark-800 border border-dark-700 text-[11px] text-zinc-300">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span className="font-mono text-zinc-400">K8s Operational</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${clusterBadge.dotCls}`} />
+          <span className="font-mono text-zinc-400">{clusterBadge.label}</span>
         </div>
 
         {user?.logged_in && (

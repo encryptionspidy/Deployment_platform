@@ -8,7 +8,10 @@ groups:
           severity: critical
         annotations:
           summary: "SLO error budget has been breached"
-          description: "Error budget remaining is {{ $value }}%, meaning the deployment success rate has fallen below the 95% SLO target."
+          description: >
+            Error budget remaining is {{ $value | printf "%.2f" }}%.
+            The deployment success rate has fallen below the 95% SLO target.
+            Immediate action required to halt non-critical deploys.
 
       - alert: HighErrorBudgetBurnRate
         expr: slo:error_budget_burn_rate:1h > 2
@@ -17,4 +20,67 @@ groups:
           severity: warning
         annotations:
           summary: "Error budget is burning faster than sustainable"
-          description: "Current burn rate is {{ $value }}x — at this rate, the error budget will be exhausted well before the SLO period ends."
+          description: >
+            Current 1-hour burn rate is {{ $value | printf "%.2f" }}x.
+            At this rate, the full error budget will be exhausted well before
+            the SLO period ends. Investigate recent deployments for failures.
+
+      - alert: SLIDataMissing
+        expr: absent(sli:deployment_success_rate:current)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SLI metric missing from Prometheus"
+          description: >
+            The sli:deployment_success_rate:current recording rule is absent.
+            Check that the metrics-exporter is running and Prometheus can scrape it.
+
+  - name: infrastructure_alerts
+    rules:
+      - alert: MetricsExporterDown
+        expr: up{job="metrics-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Metrics exporter is down"
+          description: >
+            The metrics-exporter service at {{ $labels.instance }} has been unreachable
+            for 2 minutes. SLO metrics will become stale.
+
+      - alert: HighWebhookInvalidSignatureRate
+        expr: rate(webhooks_invalid_signature_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated rate of invalid webhook signatures"
+          description: >
+            More than 0.1 invalid-signature webhook rejections per second over
+            the past 5 minutes. This may indicate a misconfigured webhook secret
+            or a brute-force attempt.
+
+      - alert: BuildWorkerBacklogHigh
+        expr: build_jobs_active > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Build worker job backlog is high"
+          description: >
+            {{ $value }} build jobs are currently active. Consider scaling
+            the build-worker deployment.
+
+      - alert: HighHTTPErrorRate
+        expr: >
+          sum(rate(http_errors_total{status_code=~"5.."}[5m])) /
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dashboard backend 5xx error rate exceeds 5%"
+          description: >
+            The dashboard-backend is returning 5xx errors at
+            {{ $value | printf "%.1f" | mul 100 }}% of requests.

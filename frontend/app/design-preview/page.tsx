@@ -1,5 +1,9 @@
 "use client";
 
+// ⚠️  DEVELOPMENT UTILITY — This page is for design/component preview only.
+// It is intentionally excluded from the main navigation in production builds.
+// Access via /design-preview directly or via the sidebar in development mode.
+
 import React from "react";
 import Link from "next/link";
 import { ArrowLeft, Rocket, ShieldAlert, CheckCircle2, Terminal } from "lucide-react";

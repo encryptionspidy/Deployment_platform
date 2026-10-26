@@ -1,19 +1,21 @@
 import redis
 import json
+from app.core.config import settings
 
-# Connects to Redis running on localhost:6379 (matches our docker run command)
-redis_client = redis.Redis(host="localhost", port=6379, db=0)
+redis_client = redis.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0)
 
 QUEUE_NAME = "build_jobs"
 
+
 def publish_build_job(repo_name: str, commit_sha: str):
     """
-    Pushes a small job onto the Redis list (acting as a simple queue).
-    The build-worker service will later pop jobs off this same list.
+    Pushes a build job onto the Redis queue.
+    The build-worker service will pop jobs off this same list.
     """
     job = {
         "repo": repo_name,
         "commit": commit_sha
     }
     redis_client.rpush(QUEUE_NAME, json.dumps(job))
-    print(f"Published job to queue: {job}")
+    # Log only repo/commit prefix - never log secrets or tokens
+    print(f"Published job to queue: repo={repo_name} commit={commit_sha[:7]}")

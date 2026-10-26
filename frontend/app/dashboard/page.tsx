@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Rocket,
@@ -11,6 +11,8 @@ import {
   Plus,
   RefreshCw,
   Zap,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,12 +23,24 @@ import { ProjectCard } from "@/components/projects/project-card";
 import { DeploymentRow } from "@/components/deployments/deployment-row";
 import { DeploymentPipelineStepper } from "@/components/deployments/deployment-pipeline-stepper";
 import { api } from "@/lib/api";
-import {
-  Project,
-  PendingDeployment,
-  Deployment,
-  SloMetrics,
-} from "@/lib/types";
+import { Project, PendingDeployment, Deployment, SloMetrics } from "@/lib/types";
+
+// ── Toast component ───────────────────────────────────────────────────────────
+function Toast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex items-start gap-3 bg-dark-800 border border-red-500/30 text-red-400 text-xs rounded-xl px-4 py-3 shadow-xl max-w-sm">
+      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      <span className="flex-1">{message}</span>
+      <button onClick={onDismiss} className="text-zinc-500 hover:text-zinc-300">
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
 
 export default function DashboardOverviewPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -35,10 +49,20 @@ export default function DashboardOverviewPage() {
   const [slo, setSlo] = useState<SloMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
 
-  const loadDashboardData = async (isManual = false) => {
+  // Track the active abort controller so we can cancel in-flight requests
+  const abortRef = useRef<AbortController | null>(null);
+
+  const loadDashboardData = useCallback(async (isManual = false) => {
+    // Cancel any previous in-flight requests
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    if (isManual) setRefreshing(true);
+
     try {
-      if (isManual) setRefreshing(true);
       const [projectsData, pendingData, sloData, historyData] =
         await Promise.allSettled([
           api.getConnectedProjects(),
@@ -47,28 +71,64 @@ export default function DashboardOverviewPage() {
           api.getDeploymentHistory(),
         ]);
 
+      // If request was aborted, bail out silently
+      if (controller.signal.aborted) return;
+
       if (projectsData.status === "fulfilled") setProjects(projectsData.value);
       if (pendingData.status === "fulfilled") setPending(pendingData.value);
       if (sloData.status === "fulfilled") setSlo(sloData.value);
       if (historyData.status === "fulfilled") setHistory(historyData.value);
-    } catch {
-      // Handled silently
+
+      // Show toast if all requests failed (likely auth or network issue)
+      const allFailed = [projectsData, pendingData, sloData, historyData].every(
+        (r) => r.status === "rejected"
+      );
+      if (allFailed) {
+        setErrorToast("Unable to reach the backend API. Check your connection.");
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      setErrorToast("An unexpected error occurred while loading dashboard data.");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadDashboardData();
 
-    // Real-time backend status polling every 2.5 seconds
-    const interval = setInterval(() => {
-      loadDashboardData(false);
-    }, 2500);
+    // Smart polling: pause when tab is hidden, resume when visible
+    const POLL_INTERVAL = 2500;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    return () => clearInterval(interval);
-  }, []);
+    const startPolling = () => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => {
+        if (document.visibilityState === "visible") {
+          loadDashboardData(false);
+        }
+      }, POLL_INTERVAL);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadDashboardData(false); // Immediate refresh on tab focus
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [loadDashboardData]);
 
   const activeDeployment = history.find((d) =>
     ["queued", "building", "packaging", "scanning", "deploying"].includes(d.status)
@@ -79,10 +139,7 @@ export default function DashboardOverviewPage() {
       <div className="space-y-6">
         <Skeleton className="h-16 w-full rounded-xl" />
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Skeleton className="h-28 rounded-xl" />
-          <Skeleton className="h-28 rounded-xl" />
-          <Skeleton className="h-28 rounded-xl" />
-          <Skeleton className="h-28 rounded-xl" />
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
         </div>
         <Skeleton className="h-40 w-full rounded-xl" />
       </div>
@@ -91,7 +148,12 @@ export default function DashboardOverviewPage() {
 
   return (
     <div className="space-y-6">
-      {/* Clean, Left-Aligned Header Bar (No gradients/flourishes) */}
+      {/* Toast alert */}
+      {errorToast && (
+        <Toast message={errorToast} onDismiss={() => setErrorToast(null)} />
+      )}
+
+      {/* Header Bar */}
       <div className="bg-dark-900 border border-dark-700/80 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -124,22 +186,22 @@ export default function DashboardOverviewPage() {
           <Link href="/dashboard/projects/connect">
             <Button variant="primary" size="sm">
               <Plus className="w-3.5 h-3.5" />
-              <span>Connect Repository</span>
+              <span>Connect Repo</span>
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Live Active Deployment Banner (Real-Time Stepper & Terminal Console) */}
+      {/* Live Active Deployment Banner */}
       {activeDeployment && (
         <section className="space-y-3">
           <div className="flex items-center gap-2 text-brand">
             <Zap className="w-4 h-4 animate-bounce text-brand" />
             <h2 className="text-xs font-bold uppercase tracking-wider text-brand">
-              Live Pipeline Active & Running: {activeDeployment.repo}
+              Live Pipeline: {activeDeployment.repo}
             </h2>
             <span className="text-[10px] font-mono bg-brand/15 text-brand px-2 py-0.5 rounded-full border border-brand/30 animate-pulse">
-              Stage: {activeDeployment.status.toUpperCase()}
+              {activeDeployment.status.toUpperCase()}
             </span>
           </div>
           <DeploymentPipelineStepper
@@ -149,7 +211,7 @@ export default function DashboardOverviewPage() {
         </section>
       )}
 
-      {/* SRE Reliability Summary Grid */}
+      {/* SRE Reliability Grid */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -171,13 +233,13 @@ export default function DashboardOverviewPage() {
           <SloStatCard
             title="Current SLI"
             value={slo?.sli_current_percent ?? null}
-            target={slo?.slo_target_percent ?? 99.0}
+            target={slo?.slo_target_percent ?? 95.0}
             subtitle="1-hour rolling success rate"
             type="sli"
           />
           <SloStatCard
             title="SLO Target"
-            value={slo?.slo_target_percent ?? 99.0}
+            value={slo?.slo_target_percent ?? 95.0}
             subtitle="Configured objective target"
             type="target"
           />
@@ -197,7 +259,7 @@ export default function DashboardOverviewPage() {
         </div>
       </section>
 
-      {/* Pending Approvals Section (Trivy CVE Holds) */}
+      {/* Pending Approvals */}
       {pending.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center gap-2 text-amber-400">
@@ -206,7 +268,6 @@ export default function DashboardOverviewPage() {
               Security Action Required ({pending.length} Pending Review)
             </h2>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {pending.map((dep) => (
               <PendingApprovalCard
@@ -219,7 +280,7 @@ export default function DashboardOverviewPage() {
         </section>
       )}
 
-      {/* Connected Projects Section */}
+      {/* Connected Projects */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -240,9 +301,7 @@ export default function DashboardOverviewPage() {
         {projects.length === 0 ? (
           <Card className="text-center py-10 bg-dark-900 border-dark-700">
             <FolderGit2 className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
-            <h3 className="text-sm font-semibold text-zinc-200">
-              No connected repositories yet
-            </h3>
+            <h3 className="text-sm font-semibold text-zinc-200">No connected repositories yet</h3>
             <p className="text-xs text-zinc-400 mt-1 mb-4">
               Connect a GitHub repository to enable automated push webhooks.
             </p>
@@ -262,7 +321,7 @@ export default function DashboardOverviewPage() {
         )}
       </section>
 
-      {/* Recent Deployments Activity */}
+      {/* Recent Deployments */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -282,7 +341,7 @@ export default function DashboardOverviewPage() {
 
         {history.length === 0 ? (
           <Card className="text-center py-8 text-xs text-zinc-500 bg-dark-900 border-dark-700">
-            No recent deployments recorded yet. Push a commit to trigger the pipeline!
+            No recent deployments. Push a commit to trigger the pipeline.
           </Card>
         ) : (
           <div className="space-y-2">

@@ -1,24 +1,21 @@
 from fastapi import APIRouter, Request, HTTPException
 import httpx
 from app.core.deps import get_current_user_with_token
+from app.core.config import settings
 from app.db.models import SessionLocal, Project
 
 router = APIRouter()
 
 GITHUB_API_BASE = "https://api.github.com"
 
-import os
-
-# Read from env or fallback to active ngrok/domain endpoint
-WEBHOOK_TARGET_URL = os.getenv("WEBHOOK_TARGET_URL", "https://sly-hardship-friday.ngrok-free.dev/webhook/github")
-WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "my-permanent-secret-123")
+# Read entirely from env — no hardcoded URLs or secrets
+WEBHOOK_TARGET_URL = settings.WEBHOOK_TARGET_URL
+WEBHOOK_SECRET = settings.GITHUB_WEBHOOK_SECRET
 
 
 @router.get("/projects")
 def list_connected_projects(request: Request):
-    """
-    Returns the logged-in user's connected projects.
-    """
+    """Returns the logged-in user's connected projects."""
     auth_data = get_current_user_with_token(request)
     user = auth_data["user"]
 
@@ -40,9 +37,7 @@ def list_connected_projects(request: Request):
 
 @router.get("/projects/repos")
 async def list_repos(request: Request):
-    """
-    Lists the logged-in user's GitHub repositories with graceful offline/demo fallback.
-    """
+    """Lists the logged-in user's GitHub repositories with graceful offline/demo fallback."""
     auth_data = get_current_user_with_token(request)
     access_token = auth_data["access_token"]
 
@@ -64,7 +59,7 @@ async def list_repos(request: Request):
     except Exception as e:
         print(f"Notice: GitHub API fetch repos offline/fallback: {e}")
 
-    # Fallback demo repositories for presentation & offline mode
+    # Fallback demo repositories for offline mode
     return [
         {"full_name": "encryptionspidy/LogVision", "private": False},
         {"full_name": "encryptionspidy/IMAP-Email-Server", "private": False},
@@ -75,9 +70,7 @@ async def list_repos(request: Request):
 
 @router.post("/projects/connect")
 async def connect_repo(repo_full_name: str, request: Request):
-    """
-    Registers a webhook on the user's repo via GitHub API (gracefully handles offline/demo mode).
-    """
+    """Registers a webhook on the user's repo via GitHub API."""
     auth_data = get_current_user_with_token(request)
     user = auth_data["user"]
     access_token = auth_data["access_token"]
@@ -113,7 +106,6 @@ async def connect_repo(repo_full_name: str, request: Request):
     except Exception as e:
         print(f"Notice: GitHub webhook creation notice (offline/demo mode): {e}")
 
-    # Save project to Postgres DB for the logged-in user if not already added
     db = SessionLocal()
     try:
         existing = (
@@ -144,9 +136,7 @@ async def connect_repo(repo_full_name: str, request: Request):
 
 @router.delete("/projects/{project_id}")
 def disconnect_project(project_id: int, request: Request):
-    """
-    Disconnects a project and removes its record from PostgreSQL database.
-    """
+    """Disconnects a project and removes its record from PostgreSQL."""
     auth_data = get_current_user_with_token(request)
     user = auth_data["user"]
 

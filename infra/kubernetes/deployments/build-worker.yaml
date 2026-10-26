@@ -1,0 +1,70 @@
+# ==============================================================================
+# build-worker — Kubernetes Deployment
+# ==============================================================================
+# NOTE: build-worker needs access to the Docker socket to build images.
+# This requires the node to have Docker installed and a privileged pod policy.
+# In production, consider replacing docker-in-docker with Kaniko or Buildah.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: build-worker
+  namespace: deploy-platform
+  labels:
+    app: build-worker
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: build-worker
+  template:
+    metadata:
+      labels:
+        app: build-worker
+    spec:
+      containers:
+        - name: build-worker
+          image: deploy-platform/build-worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: build-worker-secrets
+                  key: ENCRYPTION_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: build-worker-secrets
+                  key: DATABASE_URL
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: deploy-platform-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: deploy-platform-config
+                  key: REDIS_PORT
+            - name: BUILD_TIMEOUT_SECONDS
+              value: "300"
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket

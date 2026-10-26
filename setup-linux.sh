@@ -45,33 +45,42 @@ if [ -d "frontend" ]; then
 fi
 
 echo ""
-echo "=== [4/4] Ensuring Default .env Configuration Files Exist ==="
+echo "=== [4/4] Ensuring .env Configuration Files Exist ==="
 if [ ! -f "services/dashboard-backend/.env" ]; then
     cat <<EOF > services/dashboard-backend/.env
-GITHUB_CLIENT_ID=Ov23li6NUg4LHq6HoYFk
-GITHUB_CLIENT_SECRET=f874f23cb2610dd6052033f48e684c34c8dba9cf
-SESSION_SECRET=deploy_platform_secure_session_secret_998877
-ENCRYPTION_KEY=JvPPQta6LlI-6UymvHBhQdqNM8N3yIIeo0F9T_6_vIo=
+# Copy from ../../.env.example and fill in real values
+GITHUB_CLIENT_ID=your_github_oauth_client_id
+GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
+SESSION_SECRET=change_me_to_a_long_random_string_in_production
+ENCRYPTION_KEY=generate_with_python3_-c_from_cryptography_import_Fernet_print_Fernet_generate_key_decode
 WEBHOOK_TARGET_URL=http://localhost:8000/webhook/github
-GITHUB_WEBHOOK_SECRET=my-permanent-secret-123
+GITHUB_WEBHOOK_SECRET=change_me_to_a_random_secret
 DATABASE_URL=postgresql://devops:devops123@localhost:5433/deploy_platform
+REDIS_HOST=localhost
+REDIS_PORT=6379
+PROMETHEUS_URL=http://localhost:9090
+ENABLE_DEMO_LOGIN=false
 EOF
-    echo "   -> Created services/dashboard-backend/.env"
+    echo "   -> Created services/dashboard-backend/.env (fill in real secrets before running)"
 fi
 
 if [ ! -f "services/build-worker/.env" ]; then
     cat <<EOF > services/build-worker/.env
-ENCRYPTION_KEY=JvPPQta6LlI-6UymvHBhQdqNM8N3yIIeo0F9T_6_vIo=
+ENCRYPTION_KEY=must_match_dashboard_backend_ENCRYPTION_KEY
 DATABASE_URL=postgresql://devops:devops123@localhost:5433/deploy_platform
+REDIS_HOST=localhost
+REDIS_PORT=6379
 EOF
-    echo "   -> Created services/build-worker/.env"
+    echo "   -> Created services/build-worker/.env (fill in real ENCRYPTION_KEY)"
 fi
 
 if [ ! -f "services/webhook-receiver/.env" ]; then
     cat <<EOF > services/webhook-receiver/.env
-GITHUB_WEBHOOK_SECRET=my-permanent-secret-123
+GITHUB_WEBHOOK_SECRET=change_me_to_match_webhook_secret
+REDIS_HOST=localhost
+REDIS_PORT=6379
 EOF
-    echo "   -> Created services/webhook-receiver/.env"
+    echo "   -> Created services/webhook-receiver/.env (fill in GITHUB_WEBHOOK_SECRET)"
 fi
 
 if [ ! -f "services/metrics-exporter/.env" ]; then

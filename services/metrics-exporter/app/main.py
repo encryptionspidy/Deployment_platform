@@ -1,34 +1,37 @@
-from fastapi import FastAPI, Response
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Response
 from sqlalchemy import create_engine, text
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 
-app = FastAPI()
+load_dotenv()
 
-# Same database, different port fix as build-worker (5433, not 5432)
-DATABASE_URL = "postgresql://devops:devops123@127.0.0.1:5433/deploy_platform"
+app = FastAPI(title="Deploy Platform Metrics Exporter")
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://devops:devops123@localhost:5433/deploy_platform"
+)
 engine = create_engine(DATABASE_URL)
 
-# Prometheus gauges — these hold the current value each time they're set
+# Prometheus gauges
 successful_deployments_gauge = Gauge(
     "deployments_successful_total",
-    "Total number of successful deployments"
+    "Total successful deployments in the rolling 1-hour window",
 )
 total_deployments_gauge = Gauge(
     "deployments_total",
-    "Total number of deployments attempted"
+    "Total deployments attempted in the rolling 1-hour window",
 )
 success_rate_gauge = Gauge(
     "deployment_success_rate_percent",
-    "Current deployment success rate as a percentage"
+    "Deployment success rate percentage (1-hour rolling window)",
 )
 
 
 def fetch_deployment_stats():
     """
-    Queries Postgres for success/total counts within a rolling time window.
-    Using a rolling window (instead of all-time) means the SLI reflects
-    recent reliability and can actually recover after an incident,
-    rather than being permanently dragged down by old failures.
+    Queries Postgres for success/total counts in a 1-hour rolling window.
+    Rolling window ensures the SLI reflects recent reliability.
     """
     query = text("""
         SELECT
@@ -39,23 +42,39 @@ def fetch_deployment_stats():
     """)
     with engine.connect() as conn:
         result = conn.execute(query).fetchone()
-        successful, total = result[0], result[1]
-        return successful, total
+        return result[0], result[1]
 
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello from metrics-exporter"}
+    return {"message": "Deploy Platform Metrics Exporter is running"}
+
+
+@app.get("/healthz")
+def healthz():
+    """Liveness probe — returns OK if the process is alive."""
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz():
+    """Readiness probe — returns OK only if the database is reachable."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ready"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database not ready: {e}")
 
 
 @app.get("/metrics")
 def metrics():
     """
-    This is the endpoint Prometheus will scrape.
-    Every time it's hit, we query Postgres fresh and update the gauges.
+    Prometheus scrape endpoint. Queries Postgres on every scrape and
+    updates gauges with fresh deployment statistics.
     """
     successful, total = fetch_deployment_stats()
-    success_rate = round((successful / total) * 100, 2) if total > 0 else 0
+    success_rate = round((successful / total) * 100, 2) if total > 0 else 0.0
 
     successful_deployments_gauge.set(successful)
     total_deployments_gauge.set(total)

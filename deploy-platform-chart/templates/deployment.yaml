@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: {{ .Values.appName }}
   namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.appName }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -15,10 +18,15 @@ spec:
     spec:
       containers:
         - name: {{ .Values.appName }}
-          image: {{ .Values.image }}
-          imagePullPolicy: Never
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.containerPort }}
+              name: http
+          {{- if .Values.env }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          {{- end }}
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}
@@ -26,3 +34,17 @@ spec:
             limits:
               cpu: {{ .Values.resources.limits.cpu }}
               memory: {{ .Values.resources.limits.memory }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.liveness.path }}
+              port: {{ .Values.containerPort }}
+            initialDelaySeconds: {{ .Values.healthCheck.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.liveness.periodSeconds }}
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.readiness.path }}
+              port: {{ .Values.containerPort }}
+            initialDelaySeconds: {{ .Values.healthCheck.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.readiness.periodSeconds }}
+            failureThreshold: 3

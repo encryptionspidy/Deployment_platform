@@ -11,11 +11,13 @@ const config: Config = {
     extend: {
       colors: {
         dark: {
-          950: "#0a0a0a", // Primary dark background
-          900: "#121214", // Surface / Sidebar
-          800: "#18181b", // Card background
-          700: "#27272a", // Borders / Dividers
-          600: "#3f3f46", // Low-contrast highlights
+          950: "#0a0a0a",   // Primary dark background
+          900: "#121214",   // Surface / Sidebar
+          850: "#141416",   // Mid-dark surface (topbar, hover states)
+          800: "#18181b",   // Card background
+          750: "#222226",   // Slightly lighter card / filter pills
+          700: "#27272a",   // Borders / Dividers
+          600: "#3f3f46",   // Low-contrast highlights
         },
         brand: {
           DEFAULT: "#3b82f6",
@@ -36,6 +38,12 @@ const config: Config = {
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
+      },
+      spacing: {
+        "13": "3.25rem", // h-13 used by Topbar height
+      },
+      height: {
+        "13": "3.25rem",
       },
     },
   },

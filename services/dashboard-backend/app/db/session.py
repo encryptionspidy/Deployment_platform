@@ -1,7 +1,13 @@
+import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "postgresql://devops:devops123@127.0.0.1:5433/deploy_platform"
+load_dotenv()
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://devops:devops123@localhost:5433/deploy_platform"
+)
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

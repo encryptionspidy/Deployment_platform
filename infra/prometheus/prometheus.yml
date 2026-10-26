@@ -1,5 +1,12 @@
+# ==============================================================================
+# Prometheus Configuration
+# ==============================================================================
+# metrics-exporter runs on the host (started by start.sh) bound to 0.0.0.0:8001.
+# host.docker.internal resolves to the host machine from within the container.
+
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
 
 rule_files:
   - "recording-rules.yml"
@@ -8,9 +15,18 @@ rule_files:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: ['host.docker.internal:9093']
+        # alertmanager runs as a Docker Compose service on port 9093
+        - targets: ['alertmanager:9093']
 
 scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
   - job_name: 'metrics-exporter'
+    # host.docker.internal resolves to the Docker host from within the container.
+    # The metrics-exporter binds to 0.0.0.0:8001 in start.sh so this reaches it.
     static_configs:
       - targets: ['host.docker.internal:8001']
+    metrics_path: /metrics
+    scrape_interval: 15s

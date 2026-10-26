@@ -2,14 +2,50 @@ groups:
   - name: deployment_sli_rules
     interval: 30s
     rules:
+      # Current deployment success rate from the metrics-exporter gauge
       - record: sli:deployment_success_rate:current
         expr: deployment_success_rate_percent
 
+      # SLO target (95%)
       - record: slo:deployment_success_rate:target
         expr: vector(95)
 
+      # Error budget remaining (positive = within budget, negative = breached)
       - record: slo:error_budget:remaining_percent
-        expr: sli:deployment_success_rate:current - on() group_left slo:deployment_success_rate:target
+        expr: sli:deployment_success_rate:current - on() group_left() slo:deployment_success_rate:target
 
+      # Burn rate: how fast is the error budget being consumed?
+      # 1.0 = consuming exactly at budget pace, >1 = burning faster
       - record: slo:error_budget_burn_rate:1h
         expr: (1 - (sli:deployment_success_rate:current / 100)) / (1 - 0.95)
+
+      # Total deployments in the rolling 1-hour window
+      - record: deployments:total:1h
+        expr: deployments_total
+
+      # Successful deployments in the rolling 1-hour window
+      - record: deployments:successful:1h
+        expr: deployments_successful_total
+
+  - name: http_request_rules
+    interval: 30s
+    rules:
+      # 5-minute request rate per endpoint (dashboard-backend)
+      - record: http:request_rate:5m
+        expr: rate(http_requests_total[5m])
+
+      # 5-minute error rate per endpoint
+      - record: http:error_rate:5m
+        expr: rate(http_errors_total[5m])
+
+      # P95 request latency (5m window)
+      - record: http:request_duration_p95:5m
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+
+      # Webhook receive rate
+      - record: webhook:receive_rate:5m
+        expr: rate(webhooks_received_total[5m])
+
+      # Webhook invalid signature rate
+      - record: webhook:invalid_rate:5m
+        expr: rate(webhooks_invalid_signature_total[5m])

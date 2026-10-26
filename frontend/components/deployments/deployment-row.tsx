@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from "react";
 import { GitCommit, ExternalLink, Calendar, Box, Terminal, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

@@ -5,7 +5,14 @@ load_dotenv()
 
 
 class Settings:
-    ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "JvPPQta6LlI-6UymvHBhQdqNM8N3yIIeo0F9T_6_vIo=")
+    # No hardcoded fallback - missing key must be caught at startup, not silently used
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL", "postgresql://devops:devops123@localhost:5433/deploy_platform"
+    )
+    BUILD_TIMEOUT_SECONDS: int = int(os.getenv("BUILD_TIMEOUT_SECONDS", "300"))
 
 
 settings = Settings()
