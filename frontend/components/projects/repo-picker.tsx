@@ -74,14 +74,39 @@ export function RepoPicker({ repos, connectedRepoNames, onConnected }: RepoPicke
 
       {/* Repos list */}
       <div className="space-y-3">
-        {filteredRepos.length === 0 ? (
+        {searchTerm.trim().length > 2 && !filteredRepos.some(r => r.full_name.toLowerCase() === searchTerm.toLowerCase()) && (
+          <Card className="flex items-center justify-between p-4 border-brand/40 bg-brand/5 hover:border-brand transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-brand/20 flex items-center justify-center text-brand">
+                <Plus className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-zinc-100">
+                  {searchTerm.trim()}
+                </h4>
+                <p className="text-xs text-zinc-400">
+                  Connect custom or external repository
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => handleConnect(searchTerm.trim())}
+              isLoading={connectingRepo === searchTerm.trim()}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Connect Custom</span>
+            </Button>
+          </Card>
+        )}
+
+        {filteredRepos.length === 0 && searchTerm.trim().length <= 2 ? (
           <div className="text-center py-12 bg-dark-800/40 rounded-xl border border-dark-700/50">
             <GitBranch className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
             <p className="text-sm font-medium text-zinc-300">No repositories found</p>
             <p className="text-xs text-zinc-500">
-              {searchTerm
-                ? "Try searching for a different repository name"
-                : "No GitHub repositories were returned for your profile."}
+              Type the full name of any repository (e.g. encryptionspidy/my-app) to connect it.
             </p>
           </div>
         ) : (
