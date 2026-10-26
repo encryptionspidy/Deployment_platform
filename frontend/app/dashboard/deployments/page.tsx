@@ -65,7 +65,13 @@ export default function DeploymentsPage() {
     if (statusFilter === "success")
       return d.status === "success" || d.status === "deployed";
     if (statusFilter === "pending")
-      return d.status === "pending_approval" || d.status === "queued" || d.status === "building";
+      return (
+        d.status === "pending_approval" ||
+        d.status === "queued" ||
+        d.status === "building" ||
+        d.status === "scanning" ||
+        d.status === "deploying"
+      );
     if (statusFilter === "failed")
       return d.status === "failed" || d.status === "rejected";
     return true;

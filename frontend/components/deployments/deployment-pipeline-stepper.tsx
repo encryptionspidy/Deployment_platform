@@ -10,6 +10,9 @@ import {
   ExternalLink,
   ShieldAlert,
   Server,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +50,8 @@ export function DeploymentPipelineStepper({
   onReject,
 }: DeploymentPipelineStepperProps) {
   const [actionLoading, setActionLoading] = React.useState<"approve" | "reject" | null>(null);
+  const isRunning = ["queued", "building", "packaging", "scanning", "deploying"].includes(deployment.status);
+  const [showLogs, setShowLogs] = React.useState<boolean>(isRunning || !!deployment.logs);
 
   // Map backend status to active step index (1..7)
   const getActiveStepIndex = (): number => {
@@ -253,6 +258,50 @@ export function DeploymentPipelineStepper({
               Approve & Deploy to K8s
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Live Backend Execution Logs Console */}
+      {deployment.logs && (
+        <div className="bg-dark-950 border border-dark-800 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowLogs(!showLogs)}
+            className="w-full px-3.5 py-2.5 bg-dark-850 hover:bg-dark-800/80 border-b border-dark-800 flex items-center justify-between text-left transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-brand" />
+              <span className="text-xs font-mono font-semibold text-zinc-300">
+                Backend Pipeline Execution Logs
+              </span>
+              {isRunning && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand/15 text-brand text-[10px] font-mono animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand" />
+                  Streaming Live
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-zinc-400 text-xs">
+              <span className="text-[11px] font-mono text-zinc-500">
+                {showLogs ? "Hide Console" : "Show Console"}
+              </span>
+              {showLogs ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </div>
+          </button>
+
+          {showLogs && (
+            <div className="p-3.5 max-h-56 overflow-y-auto font-mono text-[11px] text-zinc-300 leading-relaxed whitespace-pre-wrap select-text">
+              {deployment.logs}
+              {isRunning && (
+                <span className="inline-block w-2 h-3.5 ml-1 bg-brand animate-pulse align-middle" />
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 import httpx
 from app.core.config import settings
-from app.db.models import SessionLocal, User, UserCredential
+from app.db.models import SessionLocal, User, UserCredential, Project
 from app.core.crypto import encrypt_token
 
 router = APIRouter()
@@ -105,6 +105,53 @@ def get_current_user(request: Request):
     if not user:
         return {"logged_in": False}
     return {"logged_in": True, "github_username": user["login"]}
+
+
+@router.get("/auth/demo-login")
+def demo_login(request: Request):
+    """
+    Step 1 (Alternative): 1-Click Demo Login to bypass GitHub OAuth when external network is unreachable.
+    Instantly authenticates as demo user 'encryptionspidy' and ensures demo projects exist.
+    """
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.github_username == "encryptionspidy").first()
+        if not user:
+            user = User(
+                github_id=98765432,
+                github_username="encryptionspidy",
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        credential = db.query(UserCredential).filter(UserCredential.user_id == user.id).first()
+        if not credential:
+            credential = UserCredential(
+                user_id=user.id,
+                encrypted_access_token=encrypt_token("demo_token_offline_mode_12345"),
+            )
+            db.add(credential)
+            db.commit()
+
+        # Ensure demo projects exist for user
+        demo_repos = ["encryptionspidy/LogVision", "encryptionspidy/IMAP-Email-Server"]
+        for repo_name in demo_repos:
+            proj = db.query(Project).filter(Project.user_id == user.id, Project.repo_full_name == repo_name).first()
+            if not proj:
+                db.add(Project(user_id=user.id, repo_full_name=repo_name, github_webhook_id=999999))
+        db.commit()
+
+        # Set user session
+        request.session["user"] = {
+            "login": user.github_username,
+            "github_id": user.github_id,
+            "access_token": "demo_token_offline_mode_12345",
+        }
+    finally:
+        db.close()
+
+    return RedirectResponse("http://localhost:3000/dashboard")
 
 
 @router.get("/auth/logout")

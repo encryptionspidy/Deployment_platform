@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Github, Server, ArrowRight, ShieldCheck, RefreshCw } from "lucide-react";
+import { Github, Server, ArrowRight, ShieldCheck, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
@@ -17,6 +17,11 @@ export default function LoginPage() {
       loginUrl += "?switch_account=true";
     }
     window.location.href = loginUrl;
+  };
+
+  const handleDemoLogin = () => {
+    setIsRedirecting(true);
+    window.location.href = api.getDemoLoginUrl();
   };
 
   return (
@@ -66,6 +71,28 @@ export default function LoginPage() {
             >
               <Github className="w-4 h-4" />
               <span>Continue with GitHub</span>
+              <ArrowRight className="w-4 h-4 opacity-70" />
+            </Button>
+
+            <div className="relative py-2 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-dark-750" />
+              </div>
+              <span className="relative bg-dark-900 px-2 text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
+                or presentation mode
+              </span>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleDemoLogin}
+              isLoading={isRedirecting}
+              className="w-full py-3 text-xs font-semibold border-emerald-500/40 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-500/60 flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-950/30"
+            >
+              <Zap className="w-4 h-4 text-emerald-400" />
+              <span>1-Click Demo Login (Bypass GitHub)</span>
               <ArrowRight className="w-4 h-4 opacity-70" />
             </Button>
 

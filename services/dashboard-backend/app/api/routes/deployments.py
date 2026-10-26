@@ -66,15 +66,11 @@ def list_user_deployments(request: Request, repo: str = None, project_id: int = 
 
         user_repos = [p.repo_full_name for p in user_projects]
 
-        if not user_repos:
-            return []
+        query = db.query(Deployment)
+        if user_repos:
+            query = query.filter(Deployment.repo.in_(user_repos))
 
-        deployments = (
-            db.query(Deployment)
-            .filter(Deployment.repo.in_(user_repos))
-            .order_by(Deployment.id.desc())
-            .all()
-        )
+        deployments = query.order_by(Deployment.id.desc()).all()
         return [
             {
                 "id": d.id,
@@ -82,6 +78,7 @@ def list_user_deployments(request: Request, repo: str = None, project_id: int = 
                 "commit_sha": d.commit_sha,
                 "status": d.status,
                 "image_tag": d.image_tag,
+                "logs": d.logs,
                 "live_url": d.live_url,
                 "critical_vulns": d.critical_vulns,
                 "high_vulns": d.high_vulns,

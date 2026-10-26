@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Plus,
   RefreshCw,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { SloStatCard } from "@/components/reliability/slo-stat-card";
 import { PendingApprovalCard } from "@/components/deployments/pending-approval-card";
 import { ProjectCard } from "@/components/projects/project-card";
 import { DeploymentRow } from "@/components/deployments/deployment-row";
+import { DeploymentPipelineStepper } from "@/components/deployments/deployment-pipeline-stepper";
 import { api } from "@/lib/api";
 import {
   Project,
@@ -34,9 +36,9 @@ export default function DashboardOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (isManual = false) => {
     try {
-      setRefreshing(true);
+      if (isManual) setRefreshing(true);
       const [projectsData, pendingData, sloData, historyData] =
         await Promise.allSettled([
           api.getConnectedProjects(),
@@ -59,7 +61,18 @@ export default function DashboardOverviewPage() {
 
   useEffect(() => {
     loadDashboardData();
+
+    // Real-time backend status polling every 2.5 seconds
+    const interval = setInterval(() => {
+      loadDashboardData(false);
+    }, 2500);
+
+    return () => clearInterval(interval);
   }, []);
+
+  const activeDeployment = history.find((d) =>
+    ["queued", "building", "packaging", "scanning", "deploying"].includes(d.status)
+  );
 
   if (loading) {
     return (
@@ -93,10 +106,15 @@ export default function DashboardOverviewPage() {
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Live Sync (2.5s)</span>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
-            onClick={loadDashboardData}
+            onClick={() => loadDashboardData(true)}
             isLoading={refreshing}
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -111,6 +129,25 @@ export default function DashboardOverviewPage() {
           </Link>
         </div>
       </div>
+
+      {/* Live Active Deployment Banner (Real-Time Stepper & Terminal Console) */}
+      {activeDeployment && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 text-brand">
+            <Zap className="w-4 h-4 animate-bounce text-brand" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-brand">
+              Live Pipeline Active & Running: {activeDeployment.repo}
+            </h2>
+            <span className="text-[10px] font-mono bg-brand/15 text-brand px-2 py-0.5 rounded-full border border-brand/30 animate-pulse">
+              Stage: {activeDeployment.status.toUpperCase()}
+            </span>
+          </div>
+          <DeploymentPipelineStepper
+            deployment={activeDeployment}
+            onActionComplete={() => loadDashboardData(true)}
+          />
+        </section>
+      )}
 
       {/* SRE Reliability Summary Grid */}
       <section className="space-y-3">
